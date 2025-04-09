@@ -3,25 +3,30 @@ name: e2e_sft
 on:
   # Trigger the workflow on push or pull request,
   # but only for the main branch
-  push:
-    branches:
-      - main
-    paths:
-      - "**/*.py"
-      - .github/workflows/e2e_sft.yml
   pull_request:
     branches:
       - main
+      - v0.2.x
     paths:
       - "**/*.py"
       - .github/workflows/e2e_sft.yml
       - "tests/e2e/*.sh"
+      - "!verl/trainer/main_ppo.py"
+      - "!recipe/**"
 
+# Cancel jobs on the same ref if a new one is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Declare permissions just read content.
+permissions: 
+  contents: read
 
 jobs:
   e2e_sft:
     runs-on: [self-hosted, l20-1]
+    timeout-minutes: 5 # Increase this timeout value as needed
     env:
       HTTP_PROXY: ${{ secrets.PROXY_HTTP }}
       HTTPS_PROXY: ${{ secrets.PROXY_HTTPS }}
