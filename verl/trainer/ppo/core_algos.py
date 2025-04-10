@@ -380,7 +380,7 @@ def compute_policy_loss(old_log_prob,
     ratio = torch.exp(negative_approx_kl)
     ppo_kl = verl_F.masked_mean(-negative_approx_kl, response_mask)
 
-    clipped_ratio = torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
+    # clipped_ratio = torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)
 
     pg_losses1 = -advantages * ratio
     if cliprange_low is None:

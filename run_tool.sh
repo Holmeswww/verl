@@ -29,11 +29,10 @@ export SAVE_FREQ=50
 export FP8_ADAM=true
 export FP8_KVCACHE=true
 export TOOL_USE_VLLM=true
+# export TOOL_USE_VLLM=false
 export VLLM_ALLOCATION=0.5
 
-pip install -q vllm==0.8.1
-pip install -q tensordict==0.6.2
-pip install -q transformers==4.47.1
+pip install triton==3.1.0
 
 # if node rank is 0, start ray as head
 if [ $NODE_RANK -eq 0 ]; then

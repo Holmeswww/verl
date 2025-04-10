@@ -36,7 +36,7 @@ import time
 import asyncio
 from typing import Any, Union
 from verl import DataProto
-from verl.utils.torch_functional import get_eos_mask, get_response_mask, pad_2d_list_to_length, pad_sequence_to_length
+from verl.utils.torch_functional import get_response_mask, pad_2d_list_to_length, pad_sequence_to_length
 from verl.workers.rollout.base import BaseRollout
 from vllm.distributed import parallel_state as vllm_ps
 from vllm import LLM, SamplingParams
@@ -583,12 +583,12 @@ class vLLMRolloutWithSelf(vLLMRollout):
         # position_ids:   [0,0,0,0,0,1,2,3, | 4,5,6,7,8,9,10,11]
         response_position_ids = position_ids[:, -1:] + delta_position_id
         position_ids = torch.cat([position_ids, response_position_ids], dim=-1)
-        
-        # result_mask = torch.cat((torch.zeros_like(attention_mask), result_mask), dim=-1)
-        
-        response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
+        response_attention_mask = get_response_mask(response_id=response,
+                                                    eos_token=eos_token_id,
+                                                    dtype=attention_mask.dtype)
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
-        
+
+
         # all the tp ranks should contain the same data here. data in all ranks are valid
         batch = TensorDict(
             {
