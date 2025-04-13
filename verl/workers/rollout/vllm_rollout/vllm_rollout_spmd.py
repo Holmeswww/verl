@@ -105,14 +105,30 @@ class vLLMRollout(BaseRollout):
             disable_log_stats=config.disable_log_stats,
             max_num_batched_tokens=max_num_batched_tokens,
             enable_chunked_prefill=config.enable_chunked_prefill,
-            swap_space=80,
-            # quantization="fp8",
-            cpu_offload_gb=32,
+            swap_space=32,
+            cpu_offload_gb=16,
             kv_cache_dtype=config.kv_cache_dtype,
             calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
             enable_prefix_caching=False,
             preemption_mode="swap",
         )
+        # self.inference_engine = LLM(
+        #     model=model_path,
+        #     enable_sleep_mode=True,
+        #     tensor_parallel_size=tensor_parallel_size,
+        #     distributed_executor_backend="external_launcher",
+        #     dtype=config.dtype,
+        #     enforce_eager=config.enforce_eager,
+        #     gpu_memory_utilization=config.gpu_memory_utilization,
+        #     disable_custom_all_reduce=True,
+        #     skip_tokenizer_init=False,
+        #     max_model_len=config.prompt_length + config.response_length,
+        #     disable_log_stats=config.disable_log_stats,
+        #     max_num_batched_tokens=max_num_batched_tokens,
+        #     enable_chunked_prefill=config.enable_chunked_prefill,
+        #     swap_space=80,
+        #     cpu_offload_gb=40,
+        # )
 
         # Offload vllm model to reduce peak memory usage
         self.inference_engine.sleep(level=1)
@@ -257,27 +273,26 @@ class vLLMRolloutWithSelf(vLLMRollout):
         super().__init__(model_path, config, tokenizer, model_hf_config, **kwargs)
         self.tokenizer = tokenizer
 
-        query_start = "<|im_start|>user<|im_sep|>"
-        query_end = "<|im_end|><|im_start|>assistant<|im_sep|>"
+        self.tool_system_prompt = """
+A conversation betwee User and Assistant. User asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.
+The reasoning process and answer are enclosed in <think> </think> and <answer> </answer> tags, respectively.
+""".strip()
 
-        tool_start = "<tool>"
-        tool_end = "</tool>"
-        tool_response_start = "<tool_response>"
-        tool_response_end = "</tool_response>"
-        think_start = "<think>"
-        think_end = "</think>"
+        self.tool_start = "<tool>"
+        self.tool_end = "</tool>"
+        self.tool_response_start = "<tool_response>"
+        self.tool_response_end = "</tool_response>"
+        self.think_start = "<think>"
+        self.think_end = "</think>"
 
-        self.query_start_id_list = tokenizer.encode(query_start, add_special_tokens=False)
-        self.query_end_id_list = tokenizer.encode(query_end, add_special_tokens=False)
+        # self.tool_start_id_list = tokenizer.encode(tool_start, add_special_tokens=False)
+        self.tool_end_id_list = tokenizer.encode(self.tool_end, add_special_tokens=False)
 
-        self.tool_start_id_list = tokenizer.encode(tool_start, add_special_tokens=False)
-        self.tool_end_id_list = tokenizer.encode(tool_end, add_special_tokens=False)
+        # self.tool_response_start_id_list = tokenizer.encode(tool_response_start, add_special_tokens=False)
+        # self.tool_response_end_id_list = tokenizer.encode(tool_response_end, add_special_tokens=False)
 
-        self.tool_response_start_id_list = tokenizer.encode(tool_response_start, add_special_tokens=False)
-        self.tool_response_end_id_list = tokenizer.encode(tool_response_end, add_special_tokens=False)
-
-        self.think_start_id_list = tokenizer.encode(think_start, add_special_tokens=False)
-        self.think_end_id_list = tokenizer.encode(think_end, add_special_tokens=False)
+        # self.think_start_id_list = tokenizer.encode(think_start, add_special_tokens=False)
+        # self.think_end_id_list = tokenizer.encode(think_end, add_special_tokens=False)
 
     def extract_tool_content_from_string(self, text: str, tag: str = "tool") -> str:
         try:
@@ -356,6 +371,23 @@ class vLLMRolloutWithSelf(vLLMRollout):
         
         return response[end_position+len(end_ids):]
 
+    def remove_tagged_block_str(self, response: str, end_tag: str) -> str:
+
+        # if there's an answer block, extract the content within the <answer> tags
+        if "<answer>" in response and "</answer>" in response:
+            start_position = response.rfind("<answer>")
+            end_position = response.rfind("</answer>")
+            return response[start_position + len("<answer>"):end_position].strip()
+
+        else:
+            # if there's a tool block, remove any thinking tags and return the content
+
+            end_position = response.rfind(end_tag)
+
+            if end_position == -1:
+                return response.strip()
+            
+            return response[end_position+len(end_tag):].strip()
 
     @torch.no_grad()
     def generate_sequences(self, prompts: DataProto, **kwargs) -> DataProto:
@@ -426,67 +458,81 @@ class vLLMRolloutWithSelf(vLLMRollout):
                         break
 
                     # if the output ends with self.tool_end_id_list, we need to extract the tool content and do the tool query
-                    elif curr_output_ids[-len(self.tool_end_id_list):] == self.tool_end_id_list:
-
+                    elif all([a == b for a,b in zip(curr_output_ids[-(len(self.tool_end_id_list)-1):-1], self.tool_end_id_list[1:-1])]):
 
                         # detokenize the output
                         curr_output_ids_decoded = self.tokenizer.decode(curr_output_ids, skip_special_tokens=False)
-                        print("--> Generation stopped with: {}" .format(curr_output_ids_decoded[-10:]))
-                        tool_content = self.extract_tool_content_from_ids(curr_output_ids, self.tool_start_id_list, self.tool_end_id_list)
-                        tool_query = self.query_start_id_list + tool_content + self.query_end_id_list
+                        # print("--> Generation stopped with [tool]: ```{}```" .format(repr(curr_output_ids_decoded[-10:]))) # DEBUG
+                        # print("Checking string ```{}``` for {} and {}".format(curr_output_ids_decoded.strip()[-20:], curr_output_ids_decoded.strip().endswith("</tool>"), "<tool>" in curr_output_ids_decoded))
 
-                        # detokenize the tool query
-                        tool_query_decoded = self.tokenizer.decode(tool_query, skip_special_tokens=False)
-                        print("--> Tool query: {}" .format(tool_query_decoded))
-                        print()
+                        if curr_output_ids_decoded.strip().endswith("</tool>") and "<tool>" in curr_output_ids_decoded:
+                            tool_content_str = self.extract_tool_content_from_string(curr_output_ids_decoded, "tool")
+                            chat_template = [
+                                {"role": "system", "content": self.tool_system_prompt},
+                                {"role": "user", "content": tool_content_str}
+                            ]
+                            tool_query_str = self.tokenizer.apply_chat_template(chat_template, tokenize=False)
 
-                        tool_max_tokens = self.sampling_params.max_tokens - len(tool_query)
-                        with self.update_sampling_params(n=1, max_tokens=tool_max_tokens):
-                            tool_output = self.inference_engine.generate(
-                                prompts=None,  # because we have already convert it to prompt token id
-                                sampling_params=self.sampling_params,
-                                prompt_token_ids=tool_query,
-                                use_tqdm=False)
+                            # print("--> Tool query: {}" .format(repr(tool_query_str))) # DEBUG
+                            # print()
 
-                        tool_output_ids = tool_output[0].outputs[0].token_ids
-                        tool_output_ids = tool_output_ids[len(tool_query):]
+                            # detokenize the tool query
+                            tool_query = self.tokenizer.encode(tool_query_str, add_special_tokens=False)
 
-                        # detokenize the tool output
-                        tool_output_ids_decoded = self.tokenizer.decode(tool_output_ids, skip_special_tokens=False)
-                        print("--> Tool output: {}" .format(tool_output_ids_decoded[-10:]))
-                        # remove the think tag
 
-                        tool_output_ids = self.remove_tagged_block(tool_output_ids, self.think_end_id_list)
-                        if tool_output_ids[-1] == self.tokenizer.eos_token_id:
-                            tool_output_ids = tool_output_ids[:-1]
+                            tool_max_tokens = self.sampling_params.max_tokens - len(tool_query)
+                            with self.update_sampling_params(n=1, max_tokens=tool_max_tokens):
+                                tool_output = self.inference_engine.generate(
+                                    prompts=None,  # because we have already convert it to prompt token id
+                                    sampling_params=self.sampling_params,
+                                    prompt_token_ids=tool_query,
+                                    use_tqdm=False)
 
-                        curr_result_mask.extend([1] * len(curr_output_ids))
-                        prefix_len = len(curr_output_ids)
-                        # update curr_output_ids with search result
-                        curr_output_ids = curr_output_ids + self.tool_response_start_id_list + tool_output_ids + self.tool_response_end_id_list
-                        curr_result_mask.extend([0] * (len(curr_output_ids) - prefix_len))
+                            tool_output_ids = tool_output[0].outputs[0].token_ids
 
-                        curr_output_ids = curr_output_ids[:curr_max_tokens]
-                        curr_result_mask = curr_result_mask[:curr_max_tokens]
-                        
-                        # prepare for continue thinking
-                        curr_input_ids += curr_output_ids
-                        curr_max_tokens -= len(curr_output_ids)
+                            if len(tool_output_ids)>0 and tool_output_ids[-1] == self.tokenizer.eos_token_id:
+                                tool_output_ids = tool_output_ids[:-1]
 
-                        # detokenize new input ids
-                        curr_input_ids_decoded = self.tokenizer.decode(curr_input_ids, skip_special_tokens=False)
-                        print("--> New input ids: {}" .format(curr_input_ids_decoded[-10:]))
-                        print()
+                            # detokenize the tool output
+                            tool_output_str = self.tokenizer.decode(tool_output_ids, skip_special_tokens=False)
+                            # print("--> Tool output: {}" .format(repr(tool_output_str))) # DEBUG
+
+                            # remove the think tag
+                            tool_output_str = self.remove_tagged_block_str(tool_output_str, self.think_end)
+
+                            curr_result_mask.extend([1] * len(curr_output_ids))
+                            prefix_len = len(curr_output_ids)
+
+                            tool_output_str = self.tool_response_start + tool_output_str + self.tool_response_end
+                            tool_output_ids = self.tokenizer.encode(tool_output_str, add_special_tokens=False)
+                            # update curr_output_ids with search result
+                            curr_output_ids = list(curr_output_ids) + list(tool_output_ids)
+                            curr_result_mask.extend([0] * (len(curr_output_ids) - prefix_len))
+
+                            curr_output_ids = curr_output_ids[:curr_max_tokens]
+                            curr_result_mask = curr_result_mask[:curr_max_tokens]
+                            
+                            # prepare for continue thinking
+                            curr_input_ids += curr_output_ids
+                            curr_max_tokens -= len(curr_output_ids)
+
+                            # detokenize new input ids for DEBUG
+                            # curr_input_ids_decoded = self.tokenizer.decode(curr_input_ids, skip_special_tokens=False)
+                            # print("--> New input ids: {}" .format(curr_input_ids_decoded[-256:]))
+                            # print()
+
+                            continue
                     
                     # if the output ends with other tags, we just continue
-                    else:
-                        # detokenize the output
-                        curr_output_ids_decoded = self.tokenizer.decode(curr_output_ids, skip_special_tokens=False)
-                        print("--> Generation stopped with: {}" .format(curr_output_ids_decoded[-10:]))
 
-                        curr_input_ids += curr_output_ids
-                        curr_max_tokens -= len(curr_output_ids)
-                        curr_result_mask.extend([1] * len(curr_output_ids))
+                    # detokenize the output for DEBUG
+                    # curr_output_ids_decoded = self.tokenizer.decode(curr_output_ids, skip_special_tokens=False)
+                    # print("--> Generation stopped with: ```{}```" .format(repr(curr_output_ids_decoded[-10:])))
+                    # print("Note, the output {} : ```{}``` is not ended with </tool> tag ```{}```.".format(repr(curr_output_ids_decoded[-10:]), curr_output_ids[-len(self.tool_end_id_list):], self.tool_end_id_list))
+
+                    curr_input_ids += curr_output_ids
+                    curr_max_tokens -= len(curr_output_ids)
+                    curr_result_mask.extend([1] * len(curr_output_ids))
 
                 # output_ids_list.append(curr_input_ids[len(input_ids):])
                 # result_mask_list.append(curr_result_mask)

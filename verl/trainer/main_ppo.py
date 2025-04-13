@@ -30,11 +30,6 @@ def run_ppo(config, compute_score=None):
         # this is for local ray cluster
         ray.init(runtime_env={'env_vars': {'TOKENIZERS_PARALLELISM': 'true', 'NCCL_DEBUG': 'WARN'}})
 
-    # data context, wait for all actors to be ready
-    # this is important for local ray cluster
-    ctx = DataContext.get_current()
-    ctx.wait_for_min_actors_s = 60 * 10 * 4
-
     ray.get(main_task.remote(config, compute_score))
 
 
