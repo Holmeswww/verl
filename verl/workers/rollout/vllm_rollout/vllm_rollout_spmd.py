@@ -91,27 +91,54 @@ class vLLMRollout(BaseRollout):
         assert model_hf_config.max_position_embeddings >= config.prompt_length + config.response_length, \
             "model context length should be greater than total sequence length"
 
-        self.inference_engine = LLM(
-            model=model_path,
-            enable_sleep_mode=True,
-            tensor_parallel_size=tensor_parallel_size,
-            distributed_executor_backend="external_launcher",
-            dtype=config.dtype,
-            enforce_eager=config.enforce_eager,
-            gpu_memory_utilization=config.gpu_memory_utilization,
-            disable_custom_all_reduce=True,
-            skip_tokenizer_init=False,
-            max_model_len=config.prompt_length + config.response_length,
-            disable_log_stats=config.disable_log_stats,
-            max_num_batched_tokens=max_num_batched_tokens,
-            enable_chunked_prefill=config.enable_chunked_prefill,
-            swap_space=32,
-            cpu_offload_gb=16,
-            kv_cache_dtype=config.kv_cache_dtype,
-            calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
-            enable_prefix_caching=False,
-            preemption_mode="swap",
-        )
+        current_GPU_memory_GB = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
+
+        if current_GPU_memory_GB > 40: # 80GB GPU
+            self.inference_engine = LLM(
+                model=model_path,
+                enable_sleep_mode=True,
+                tensor_parallel_size=tensor_parallel_size,
+                distributed_executor_backend="external_launcher",
+                dtype=config.dtype,
+                enforce_eager=config.enforce_eager,
+                gpu_memory_utilization=config.gpu_memory_utilization,
+                disable_custom_all_reduce=True,
+                skip_tokenizer_init=False,
+                max_model_len=config.prompt_length + config.response_length,
+                disable_log_stats=config.disable_log_stats,
+                max_num_batched_tokens=max_num_batched_tokens,
+                enable_chunked_prefill=config.enable_chunked_prefill,
+                swap_space=80,
+                # cpu_offload_gb=16,
+                kv_cache_dtype=config.kv_cache_dtype,
+                calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
+                enable_prefix_caching=False,
+                preemption_mode="swap",
+            )
+        else: # 40GB GPU
+            print("GPU too bad Warning: Using a GPU with less than 80GB of memory. Setting swap space to 32GB. Long sequence generation may fail")
+            self.inference_engine = LLM(
+                model=model_path,
+                enable_sleep_mode=True,
+                tensor_parallel_size=tensor_parallel_size,
+                distributed_executor_backend="external_launcher",
+                dtype=config.dtype,
+                enforce_eager=config.enforce_eager,
+                gpu_memory_utilization=config.gpu_memory_utilization,
+                disable_custom_all_reduce=True,
+                skip_tokenizer_init=False,
+                max_model_len=config.prompt_length + config.response_length,
+                disable_log_stats=config.disable_log_stats,
+                max_num_batched_tokens=max_num_batched_tokens,
+                enable_chunked_prefill=config.enable_chunked_prefill,
+                swap_space=32,
+                cpu_offload_gb=16,
+                kv_cache_dtype=config.kv_cache_dtype,
+                calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
+                enable_prefix_caching=False,
+                preemption_mode="swap",
+            )
+
         # self.inference_engine = LLM(
         #     model=model_path,
         #     enable_sleep_mode=True,

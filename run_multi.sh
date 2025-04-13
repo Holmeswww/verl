@@ -13,9 +13,11 @@ echo "AMLT_OUTPUT_DIR=$AMLT_OUTPUT_DIR"
 # Set run variables
 export RUN_N=8
 export PPO_EPOCHS=4
+export PROJECT_NAME="reasoning_NEW"
+
 export DATASET_NAME="phi_math_new"
 
-# export MAX_LENGTH_CONTROL=30000
+export MAX_LENGTH_CONTROL=25600
 
 export MAX_RESPONSE_LENGTH=32768
 # export MAX_RESPONSE_LENGTH=40960
@@ -23,8 +25,8 @@ export MAX_RESPONSE_LENGTH=32768
 # export MAX_RESPONSE_LENGTH=92000
 
 # export BASE_MODEL="phi-4"
-export BASE_MODEL="phi-4-o3-sft-4_1_25"
-# export BASE_MODEL="phi-4-o3-sft-4_1_25_40k"
+export BASE_MODEL="phi-4-o3-sft-04_12_25_32k"
+# export BASE_MODEL="phi-4-o3-sft-04_12_25_40k"
 # export BASE_MODEL="phi-4-o3-sft-4_1_25_128k"
 
 # export PPO_MAX_TOKEN_LENGTH=32768 # This is per GPU max token length
@@ -42,10 +44,6 @@ export SAVE_FREQ=10
 export FP8_ADAM=true
 export FP8_KVCACHE=true
 export VLLM_ALLOCATION=0.5
-
-pip install -q vllm==0.8.1
-pip install -q tensordict==0.6.2
-pip install -q transformers==4.47.1
 
 # if node rank is 0, start ray as head
 if [ $NODE_RANK -eq 0 ]; then
