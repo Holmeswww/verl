@@ -17,7 +17,7 @@ export PROJECT_NAME="reasoning_NEW"
 
 export DATASET_NAME="phi_math_new"
 
-export MAX_LENGTH_CONTROL=25600
+# export MAX_LENGTH_CONTROL=25600
 
 export MAX_RESPONSE_LENGTH=32768
 # export MAX_RESPONSE_LENGTH=40960
@@ -25,12 +25,13 @@ export MAX_RESPONSE_LENGTH=32768
 # export MAX_RESPONSE_LENGTH=92000
 
 # export BASE_MODEL="phi-4"
-export BASE_MODEL="phi-4-o3-sft-04_12_25_32k"
+# export BASE_MODEL="phi-4-o3-sft-04_12_25_32k"
+export BASE_MODEL="phi-4-o3-sft-04_13_25_32k"
 # export BASE_MODEL="phi-4-o3-sft-04_12_25_40k"
 # export BASE_MODEL="phi-4-o3-sft-4_1_25_128k"
 
-# export PPO_MAX_TOKEN_LENGTH=32768 # This is per GPU max token length
-export PPO_MAX_TOKEN_LENGTH=40960
+export PPO_MAX_TOKEN_LENGTH=32768 # This is per GPU max token length
+# export PPO_MAX_TOKEN_LENGTH=40960
 # export PPO_MAX_TOKEN_LENGTH=46000
 # export PPO_MAX_TOKEN_LENGTH=64000
 

@@ -15,8 +15,8 @@ export RUN_N=6
 export PPO_EPOCHS=4
 export PROJECT_NAME="reasoning_tools"
 
-export DATASET_NAME="phi_math_tool"
-# export DATASET_NAME="phi_math_tool_subtasks"
+# export DATASET_NAME="phi_math_tool"
+export DATASET_NAME="phi_math_tool_subtasks"
 # export MAX_LENGTH_CONTROL=65536
 export MAX_RESPONSE_LENGTH=5120
 export BASE_MODEL="phi-4"
