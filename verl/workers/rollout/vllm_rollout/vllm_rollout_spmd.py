@@ -110,10 +110,10 @@ class vLLMRollout(BaseRollout):
                 enable_chunked_prefill=config.enable_chunked_prefill,
                 swap_space=80,
                 # cpu_offload_gb=16,
-                kv_cache_dtype=config.kv_cache_dtype,
-                calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
-                enable_prefix_caching=False,
-                preemption_mode="swap",
+                # kv_cache_dtype=config.kv_cache_dtype,
+                # calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
+                enable_prefix_caching=True,
+                # preemption_mode="swap",
             )
         else: # 40GB GPU
             print("GPU too bad Warning: Using a GPU with less than 80GB of memory. Setting swap space to 32GB. Long sequence generation may fail")
@@ -132,11 +132,11 @@ class vLLMRollout(BaseRollout):
                 max_num_batched_tokens=max_num_batched_tokens,
                 enable_chunked_prefill=config.enable_chunked_prefill,
                 swap_space=32,
-                cpu_offload_gb=16,
-                kv_cache_dtype=config.kv_cache_dtype,
-                calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
-                enable_prefix_caching=False,
-                preemption_mode="swap",
+                # cpu_offload_gb=16,
+                # kv_cache_dtype=config.kv_cache_dtype,
+                # calculate_kv_scales=(config.kv_cache_dtype == "fp8"),
+                enable_prefix_caching=True,
+                # preemption_mode="swap",
             )
 
         # self.inference_engine = LLM(
@@ -301,8 +301,10 @@ class vLLMRolloutWithSelf(vLLMRollout):
         self.tokenizer = tokenizer
 
         self.tool_system_prompt = """
-A conversation betwee User and Assistant. User asks a question, and the Assistant solves it. The assistant first thinks about the reasoning process in the mind and then provides the user with the answer.
-The reasoning process and answer are enclosed in <think> </think> and <answer> </answer> tags, respectively.
+A conversation betwee User and Assistant. User asks a question, and the Assistant solves it.
+The assistant is very efficient and accurate, and produces very concise answers.
+The assistant can choose to think about the question in <think> </think> tags, i.e., <think> reasoning process here </think>.
+If the question is missing some information, the assistant refuses to answer it and prompts the user to provide any missing information.
 """.strip()
 
         self.tool_start = "<tool>"

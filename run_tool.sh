@@ -11,7 +11,7 @@ echo "MASTER_PORT=$MASTER_PORT"
 echo "AMLT_OUTPUT_DIR=$AMLT_OUTPUT_DIR"
 
 # Set run variables
-export RUN_N=6
+export RUN_N=8
 export PPO_EPOCHS=4
 export PROJECT_NAME="reasoning_tools"
 
@@ -21,17 +21,26 @@ export DATASET_NAME="phi_math_tool_subtasks"
 export MAX_RESPONSE_LENGTH=5120
 export BASE_MODEL="phi-4"
 # export BASE_MODEL="phi-4-o3-sft-4_1_25_long"
-export PPO_MAX_TOKEN_LENGTH=5120 # This is per GPU max token length
-export PPO_BATCH_SIZE=$((NODES*8)) # This is batchsize of ppo
-export TRAIN_BATCH_SIZE=$((PPO_BATCH_SIZE)) # This is batchsize of the data loader
 export LR=1e-7
-export TENSOR_PARALLEL_SIZE=2
-export ULYSSES_PARALLEL_SIZE=2
+
+# if $ARCH=="A100" then set the following
+if [[ $ARCH == "A100" ]]; then
+    export TENSOR_PARALLEL_SIZE=2
+    export ULYSSES_PARALLEL_SIZE=1
+    export PPO_BATCH_SIZE=$((NODES*8)) # This is batchsize of ppo
+    export PPO_MAX_TOKEN_LENGTH=5120 # This is per GPU max token length
+else
+    export TENSOR_PARALLEL_SIZE=1
+    export ULYSSES_PARALLEL_SIZE=1
+    export PPO_BATCH_SIZE=$((5*NODES*8)) # This is batchsize of ppo
+    export PPO_MAX_TOKEN_LENGTH=25600 # This is per GPU max token length
+fi
+export TRAIN_BATCH_SIZE=$((PPO_BATCH_SIZE)) # This is batchsize of the data loader
 export SAVE_FREQ=50
 export FP8_ADAM=true
 export FP8_KVCACHE=true
 export TOOL_USE_VLLM=true
-export VLLM_ALLOCATION=0.3
+export VLLM_ALLOCATION=0.7
 
 # pip install -q vllm==0.8.1
 # pip install -q tensordict==0.6.2

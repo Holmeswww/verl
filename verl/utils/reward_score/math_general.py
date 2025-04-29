@@ -8,9 +8,13 @@ from collections import Counter
 import math
 
 import os
-MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", 14000)) - 1024
-UNIT_LENGTH = max(MAX_RESPONSE_LENGTH//4 * 3, MAX_RESPONSE_LENGTH-3702)
+MAX_RESPONSE_LENGTH = int(os.getenv("MAX_RESPONSE_LENGTH", 14000)) - 1024 # 1024 is the length of the prompt
+
+UNIT_LENGTH = int(os.getenv("REWARD_UNIT_LENGTH", max(MAX_RESPONSE_LENGTH//4 * 3, MAX_RESPONSE_LENGTH-3702))) 
+
 MAX_LENGTH_CONTROL = int(os.getenv("MAX_LENGTH_CONTROL", UNIT_LENGTH))
+
+MAX_WRONG = float(os.getenv("MAX_WRONG", 0.5))
 
 url = "https://verifier.yuewu.ml/api"
 headers = {
@@ -201,26 +205,27 @@ def compute_score(solution_str, ground_truth, response_length, max_response_leng
         # check if <tool> is used inside <think> tag
         inside_think_tag = solution_str.split("<think>")[-1].split("</think>")[0]
         if "<tool>" in inside_think_tag and "</tool>" in inside_think_tag:
-            tool_reward = 1.
+            tool_reward = min(tool_count, 3) / 3.
+            # tool_reward = 1.
 
     # Bail out if the completion is invalid or incomplete.
     if incomplete:
         rwds = [-0.5, repetition_penalty_score, soft_format_reward, xml_reward, tool_reward] # -0.5 is a penalty for incomplete answers, at least an incomplete attempt is better than a wrong one I guess.
         rwd = sum([r*w for r, w in zip(rwds, weights)]) / sum(weights)
-        return rwd, {"acc_reward_raw": 0., "acc_reward_scaled": -1., "repetition_penalty_score": repetition_penalty_score, "soft_format_reward": soft_format_reward, "xml_reward": xml_reward, "response_length": response_length, "progress": progress, "tool_use": tool_count}
+        return rwd, {"acc_reward_raw": 0., "acc_reward_scaled": -1., "repetition_penalty_score": repetition_penalty_score, "soft_format_reward": soft_format_reward, "xml_reward": xml_reward, "response_length": response_length, "progress": progress, "tool_use": tool_count, "tool_reward": tool_reward}
 
     if invalid_think or no_think:
         tool_reward = 0. # If the model does not use the think tag, we don't want to reward it for using a tool.
         rwds = [-1., repetition_penalty_score, soft_format_reward, xml_reward, tool_reward]
         rwd = sum([r*w for r, w in zip(rwds, weights)]) / sum(weights)
-        return rwd, {"acc_reward_raw": 0., "acc_reward_scaled": -1., "repetition_penalty_score": repetition_penalty_score, "soft_format_reward": soft_format_reward, "xml_reward": xml_reward, "response_length": response_length, "progress": progress, "tool_use": tool_count}
+        return rwd, {"acc_reward_raw": 0., "acc_reward_scaled": -1., "repetition_penalty_score": repetition_penalty_score, "soft_format_reward": soft_format_reward, "xml_reward": xml_reward, "response_length": response_length, "progress": progress, "tool_use": tool_count, "tool_reward": tool_reward}
 
     if "</think>" not in solution_str: # If the completion does not contain the think tag, return -1 to encourage the model to use the think tag and prevent reward hacking.
         acc_reward = -1.
         acc_reward_raw = 0.
     else:
         min_value_wrong = -1.0
-        max_value_wrong = -0.5
+        max_value_wrong = -MAX_WRONG
         # min_value_wrong = max_value_wrong = - 0.5
         min_value_correct = 0.5
         max_value_correct = 1.0
@@ -270,7 +275,8 @@ def compute_score(solution_str, ground_truth, response_length, max_response_leng
         "xml_reward": xml_reward,
         "response_length": response_length,
         "progress": progress,
-        "tool_use": tool_count
+        "tool_use": tool_count,
+        "tool_reward": tool_reward
     }
 
     return sum([r*w for r, w in zip([acc_reward, repetition_penalty_score, soft_format_reward, xml_reward, tool_reward], weights)]) / sum(weights), metric
